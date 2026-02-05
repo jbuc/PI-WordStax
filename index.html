@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Word Fall - Tetris Meets Word Puzzles</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+            color: #fff;
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        #header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 400px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            margin-bottom: 10px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #aaa;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+
+        #clue-container {
+            background: rgba(78, 204, 163, 0.2);
+            border: 2px solid #4ecca3;
+            border-radius: 15px;
+            padding: 15px 25px;
+            margin-bottom: 10px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        #clue-label {
+            font-size: 12px;
+            color: #4ecca3;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        #clue-text {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        #tap-hint {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 8px;
+            font-style: italic;
+        }
+
+        #game-area {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            border: 3px solid rgba(78, 204, 163, 0.3);
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        #grid-container {
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            gap: 5px;
+        }
+
+        .letter-row {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .letter-row.falling {
+            animation: pulse 0.5s ease-in-out infinite alternate;
+            cursor: pointer;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.02); }
+        }
+
+        .letter-cell {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(145deg, #2a2a4a, #1a1a3a);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #555;
+            transition: all 0.2s;
+        }
+
+        .letter-cell.filled {
+            background: linear-gradient(145deg, #4ecca3, #3db892);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(78, 204, 163, 0.3);
+        }
+
+        .letter-cell.falling {
+            background: linear-gradient(145deg, #e94560, #c73e54);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+        }
+
+        .letter-cell.highlight {
+            background: linear-gradient(145deg, #667eea, #5a6fd6);
+            animation: highlightPulse 0.3s ease-in-out;
+        }
+
+        @keyframes highlightPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        /* Word Finding Phase */
+        #word-phase {
+            display: none;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        #word-phase.active {
+            display: block;
+        }
+
+        #found-words-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        #found-words-label {
+            font-size: 14px;
+            color: #4ecca3;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        #found-words {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .word-chip {
+            padding: 8px 16px;
+            background: linear-gradient(145deg, #3a3a5a, #2a2a4a);
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .word-chip:hover {
+            background: linear-gradient(145deg, #4a4a6a, #3a3a5a);
+            transform: scale(1.05);
+        }
+
+        .word-chip.selected {
+            background: linear-gradient(145deg, #4ecca3, #3db892);
+            color: #1a1a2e;
+        }
+
+        .word-chip.used {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        #answer-builder {
+            background: rgba(102, 126, 234, 0.2);
+            border: 2px solid #667eea;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            min-height: 60px;
+        }
+
+        #answer-label {
+            font-size: 12px;
+            color: #667eea;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        #answer-words {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-height: 30px;
+        }
+
+        .answer-word {
+            padding: 8px 16px;
+            background: linear-gradient(145deg, #667eea, #5a6fd6);
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #fff;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+
+        .answer-word:hover {
+            transform: scale(1.05);
+            opacity: 0.8;
+        }
+
+        #buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        #submit-btn {
+            background: linear-gradient(145deg, #4ecca3, #3db892);
+            color: #1a1a2e;
+        }
+
+        #submit-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(78, 204, 163, 0.5);
+        }
+
+        #submit-btn:disabled {
+            background: #555;
+            color: #888;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        #clear-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        #clear-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Screens */
+        .screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        .screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .screen h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            background: linear-gradient(145deg, #4ecca3, #e94560);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .screen h2 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #4ecca3;
+        }
+
+        .screen p {
+            font-size: 18px;
+            color: #aaa;
+            margin-bottom: 20px;
+            text-align: center;
+            max-width: 350px;
+            padding: 0 20px;
+        }
+
+        .screen button {
+            padding: 15px 50px;
+            font-size: 20px;
+            background: linear-gradient(145deg, #e94560, #c73e54);
+            color: #fff;
+            margin-top: 10px;
+        }
+
+        .screen button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 25px rgba(233, 69, 96, 0.5);
+        }
+
+        #final-score {
+            font-size: 64px;
+            font-weight: bold;
+            color: #4ecca3;
+            margin: 20px 0;
+        }
+
+        .instructions {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px;
+            max-width: 350px;
+        }
+
+        .instructions h3 {
+            color: #4ecca3;
+            margin-bottom: 15px;
+        }
+
+        .instructions ul {
+            list-style: none;
+            text-align: left;
+        }
+
+        .instructions li {
+            margin: 10px 0;
+            padding-left: 25px;
+            position: relative;
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .instructions li::before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #e94560;
+        }
+
+        /* Level complete */
+        #level-complete-screen .answer-reveal {
+            font-size: 24px;
+            color: #667eea;
+            margin: 10px 0;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        #level-score {
+            font-size: 20px;
+            color: #aaa;
+        }
+
+        /* Shuffle animation */
+        .shuffling .letter-cell {
+            animation: shuffle 0.15s ease-in-out;
+        }
+
+        @keyframes shuffle {
+            0%, 100% { transform: rotateY(0deg); }
+            50% { transform: rotateY(90deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 420px) {
+            .letter-cell {
+                width: 42px;
+                height: 42px;
+                font-size: 20px;
+            }
+
+            #header {
+                padding: 8px 15px;
+            }
+
+            .stat-value {
+                font-size: 20px;
+            }
+
+            .word-chip, .answer-word {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Start Screen -->
+    <div id="start-screen" class="screen">
+        <h1>Word Fall</h1>
+        <p>Tetris meets word puzzles!</p>
+        <div class="instructions">
+            <h3>How to Play</h3>
+            <ul>
+                <li>Rows of letters fall from the top</li>
+                <li>Tap a falling row to shuffle its letters</li>
+                <li>Rows stack at the bottom</li>
+                <li>Once full, find words in the grid</li>
+                <li>Build a phrase to answer the clue!</li>
+            </ul>
+        </div>
+        <button id="start-btn">Start Game</button>
+    </div>
+
+    <!-- Level Complete Screen -->
+    <div id="level-complete-screen" class="screen hidden">
+        <h2>Level Complete!</h2>
+        <p>Your answer:</p>
+        <div id="answer-reveal" class="answer-reveal">ANSWER</div>
+        <div id="level-score">+500 points</div>
+        <button id="next-level-btn">Next Level</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="screen hidden">
+        <h2>Game Over</h2>
+        <p>Great job! Final score:</p>
+        <div id="final-score">0</div>
+        <p id="levels-completed">Levels completed: 0</p>
+        <button id="restart-btn">Play Again</button>
+    </div>
+
+    <!-- Main Game -->
+    <div id="game-container">
+        <div id="header">
+            <div class="stat">
+                <div class="stat-label">Level</div>
+                <div class="stat-value" id="level">1</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Score</div>
+                <div class="stat-value" id="score">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Rows</div>
+                <div class="stat-value" id="rows-left">6</div>
+            </div>
+        </div>
+
+        <div id="clue-container">
+            <div id="clue-label">Build a phrase that answers:</div>
+            <div id="clue-text">Loading...</div>
+            <div id="tap-hint">Tap falling rows to shuffle letters</div>
+        </div>
+
+        <div id="game-area">
+            <div id="grid-container"></div>
+        </div>
+
+        <div id="word-phase">
+            <div id="found-words-container">
+                <div id="found-words-label">Found Words (tap to add)</div>
+                <div id="found-words"></div>
+            </div>
+
+            <div id="answer-builder">
+                <div id="answer-label">Your Answer (tap words to remove)</div>
+                <div id="answer-words"></div>
+            </div>
+
+            <div id="buttons">
+                <button id="clear-btn">Clear</button>
+                <button id="submit-btn" disabled>Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // WORD FALL - Game Logic (Redesigned)
+        // ============================================
+
+        // Comprehensive word list for validation
+        const VALID_WORDS = new Set([
+            // 3-letter words
+            'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had',
+            'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his',
+            'how', 'its', 'let', 'may', 'new', 'now', 'old', 'see', 'two', 'way',
+            'who', 'boy', 'did', 'own', 'say', 'she', 'too', 'use', 'dad', 'mom',
+            'run', 'eat', 'hot', 'sun', 'red', 'big', 'dog', 'cat', 'bat', 'rat',
+            'hat', 'sat', 'mat', 'pat', 'fat', 'man', 'pan', 'can', 'fan', 'ran',
+            'tan', 'van', 'bed', 'fed', 'led', 'wed', 'bet', 'get', 'jet', 'let',
+            'met', 'net', 'pet', 'set', 'wet', 'yet', 'bit', 'fit', 'hit', 'kit',
+            'lit', 'pit', 'sit', 'wit', 'bot', 'cot', 'dot', 'got', 'hot', 'jot',
+            'lot', 'not', 'pot', 'rot', 'tot', 'bug', 'dug', 'hug', 'jug', 'mug',
+            'pug', 'rug', 'tug', 'bud', 'cud', 'mud', 'bus', 'pus', 'cup', 'pup',
+            'sup', 'cut', 'gut', 'hut', 'jut', 'nut', 'put', 'rut', 'tut', 'ace',
+            'ice', 'age', 'ape', 'ate', 'awe', 'axe', 'aye', 'bye', 'dye', 'eye',
+            'rye', 'add', 'odd', 'egg', 'ill', 'all', 'amp', 'ant', 'any', 'apt',
+            'arc', 'are', 'ark', 'arm', 'art', 'ash', 'ask', 'bad', 'bag', 'ban',
+            'bar', 'bay', 'beg', 'ben', 'bid', 'bin', 'bio', 'bow', 'box', 'bra',
+            'bun', 'buy', 'cab', 'cam', 'cap', 'car', 'chi', 'cob', 'cod', 'cog',
+            'cop', 'cow', 'cry', 'cub', 'cue', 'cur', 'dam', 'den', 'dew', 'die',
+            'dig', 'dim', 'dip', 'doc', 'doe', 'dry', 'dub', 'due', 'duo', 'ear',
+            'eel', 'ego', 'elk', 'elm', 'emu', 'end', 'era', 'eve', 'fad', 'fax',
+            'fee', 'fen', 'few', 'fig', 'fin', 'fir', 'fix', 'flu', 'fly', 'foe',
+            'fog', 'fop', 'fox', 'fry', 'fun', 'fur', 'gab', 'gag', 'gal', 'gap',
+            'gas', 'gay', 'gel', 'gem', 'gig', 'gin', 'gnu', 'gob', 'god', 'gum',
+            'gun', 'gut', 'guy', 'gym', 'ham', 'hay', 'hem', 'hen', 'hew', 'hex',
+            'hid', 'hip', 'hob', 'hoe', 'hog', 'hop', 'hub', 'hue', 'hum', 'hun',
+            'ice', 'icy', 'imp', 'ink', 'inn', 'ion', 'ire', 'irk', 'ivy', 'jab',
+            'jag', 'jam', 'jar', 'jaw', 'jay', 'jet', 'jig', 'job', 'jog', 'joy',
+            'jug', 'keg', 'ken', 'key', 'kid', 'kin', 'kit', 'lab', 'lac', 'lad',
+            'lag', 'lap', 'law', 'lax', 'lay', 'lea', 'led', 'leg', 'lemon', 'lid',
+            'lie', 'lip', 'lit', 'log', 'lop', 'lot', 'low', 'lug', 'mad', 'map',
+            'mar', 'mat', 'maw', 'max', 'men', 'met', 'mid', 'mix', 'mob', 'mop',
+            'mow', 'mud', 'mug', 'nab', 'nag', 'nap', 'nay', 'net', 'new', 'nil',
+            'nip', 'nit', 'nob', 'nod', 'nor', 'not', 'now', 'nun', 'nut', 'oak',
+            'oar', 'oat', 'orb', 'ore', 'our', 'out', 'owe', 'owl', 'own', 'pad',
+            'pal', 'pan', 'pap', 'par', 'pat', 'paw', 'pay', 'pea', 'peg', 'pen',
+            'pep', 'per', 'pew', 'pie', 'pig', 'pin', 'pit', 'ply', 'pod', 'pop',
+            'pot', 'pow', 'pro', 'pry', 'pub', 'pug', 'pun', 'pup', 'pus', 'put',
+            'qua', 'rad', 'rag', 'ram', 'ran', 'rap', 'rat', 'raw', 'ray', 'red',
+            'ref', 'rep', 'rib', 'rid', 'rig', 'rim', 'rip', 'rob', 'rod', 'roe',
+            'rot', 'row', 'rub', 'rue', 'rug', 'rum', 'run', 'rut', 'rye', 'sac',
+            'sad', 'sag', 'sap', 'sat', 'saw', 'say', 'sea', 'set', 'sew', 'she',
+            'shy', 'sin', 'sip', 'sir', 'sis', 'sit', 'six', 'ski', 'sky', 'sly',
+            'sob', 'sod', 'son', 'sop', 'sow', 'soy', 'spa', 'spy', 'sty', 'sub',
+            'sue', 'sum', 'sun', 'sup', 'tab', 'tad', 'tag', 'tan', 'tap', 'tar',
+            'tax', 'tea', 'ten', 'the', 'thy', 'tic', 'tie', 'tin', 'tip', 'toe',
+            'tog', 'tom', 'ton', 'too', 'top', 'tot', 'tow', 'toy', 'try', 'tub',
+            'tug', 'tux', 'two', 'urn', 'use', 'van', 'vat', 'vet', 'via', 'vie',
+            'vim', 'vow', 'wad', 'wag', 'war', 'was', 'wax', 'way', 'web', 'wed',
+            'wee', 'wet', 'who', 'why', 'wig', 'win', 'wit', 'woe', 'wok', 'won',
+            'woo', 'wow', 'yak', 'yam', 'yap', 'yaw', 'yea', 'yes', 'yet', 'yew',
+            'yin', 'yip', 'you', 'zap', 'zed', 'zen', 'zig', 'zip', 'zit', 'zoo',
+            // 4-letter words
+            'able', 'also', 'area', 'army', 'away', 'baby', 'back', 'ball', 'bank', 'base',
+            'bear', 'beat', 'been', 'bell', 'best', 'bill', 'bird', 'blue', 'boat', 'body',
+            'book', 'born', 'both', 'boys', 'call', 'came', 'camp', 'card', 'care', 'case',
+            'cast', 'city', 'club', 'cold', 'come', 'cool', 'cost', 'dark', 'data', 'days',
+            'dead', 'deal', 'deep', 'does', 'done', 'door', 'down', 'draw', 'drop', 'drug',
+            'each', 'east', 'easy', 'edge', 'else', 'even', 'ever', 'evil', 'eyes', 'face',
+            'fact', 'fail', 'fair', 'fall', 'farm', 'fast', 'fear', 'feel', 'feet', 'fell',
+            'felt', 'file', 'fill', 'film', 'find', 'fine', 'fire', 'firm', 'fish', 'five',
+            'flat', 'flow', 'food', 'foot', 'form', 'fort', 'four', 'free', 'from', 'full',
+            'fund', 'game', 'gave', 'girl', 'give', 'glad', 'goal', 'goes', 'gold', 'gone',
+            'good', 'gray', 'grew', 'grow', 'hair', 'half', 'hall', 'hand', 'hang', 'hard',
+            'have', 'head', 'hear', 'heat', 'held', 'help', 'here', 'hero', 'hide', 'high',
+            'hill', 'hold', 'hole', 'home', 'hope', 'host', 'hour', 'huge', 'hung', 'hunt',
+            'hurt', 'idea', 'iron', 'item', 'jack', 'jail', 'jobs', 'john', 'join', 'jump',
+            'jury', 'just', 'keen', 'keep', 'kept', 'kick', 'kids', 'kill', 'kind', 'king',
+            'knee', 'knew', 'know', 'lack', 'lady', 'laid', 'lake', 'land', 'last', 'late',
+            'lead', 'left', 'less', 'life', 'lift', 'like', 'line', 'link', 'list', 'live',
+            'load', 'loan', 'lock', 'long', 'look', 'lord', 'lose', 'loss', 'lost', 'love',
+            'luck', 'made', 'mail', 'main', 'make', 'male', 'many', 'mark', 'mass', 'mean',
+            'meet', 'mile', 'milk', 'mind', 'mine', 'miss', 'mode', 'moon', 'more', 'most',
+            'move', 'much', 'must', 'name', 'near', 'neck', 'need', 'news', 'next', 'nice',
+            'nine', 'none', 'nose', 'note', 'okay', 'once', 'ones', 'only', 'onto', 'open',
+            'oral', 'over', 'pace', 'pack', 'page', 'paid', 'pain', 'pair', 'park', 'part',
+            'pass', 'past', 'path', 'peak', 'pick', 'plan', 'play', 'plus', 'poem', 'poet',
+            'poll', 'pool', 'poor', 'port', 'post', 'pull', 'push', 'race', 'rain', 'rank',
+            'rare', 'rate', 'read', 'real', 'rest', 'rice', 'rich', 'ride', 'ring', 'rise',
+            'risk', 'road', 'rock', 'role', 'roll', 'roof', 'room', 'root', 'rose', 'rule',
+            'runs', 'safe', 'said', 'sake', 'sale', 'salt', 'same', 'sand', 'save', 'seat',
+            'seek', 'seem', 'seen', 'self', 'sell', 'send', 'sent', 'ship', 'shop', 'shot',
+            'show', 'shut', 'sick', 'side', 'sign', 'site', 'size', 'skin', 'slip', 'slow',
+            'snow', 'soft', 'soil', 'sold', 'sole', 'some', 'song', 'soon', 'sort', 'soul',
+            'spot', 'star', 'stay', 'step', 'stop', 'such', 'suit', 'sure', 'take', 'talk',
+            'tall', 'tank', 'tape', 'task', 'team', 'tell', 'tend', 'term', 'test', 'text',
+            'than', 'that', 'them', 'then', 'they', 'thin', 'this', 'thus', 'till', 'time',
+            'tiny', 'told', 'tone', 'took', 'tool', 'tour', 'town', 'tree', 'trip', 'true',
+            'turn', 'type', 'unit', 'upon', 'used', 'user', 'vary', 'vast', 'very', 'view',
+            'vote', 'wage', 'wait', 'wake', 'walk', 'wall', 'want', 'warm', 'wash', 'wave',
+            'ways', 'weak', 'wear', 'week', 'well', 'went', 'were', 'west', 'what', 'when',
+            'wide', 'wife', 'wild', 'will', 'wind', 'wine', 'wing', 'wire', 'wise', 'wish',
+            'with', 'wood', 'word', 'wore', 'work', 'yard', 'year', 'yeah', 'your', 'zero',
+            'zone', 'best', 'friend', 'love', 'hate', 'like', 'want', 'need', 'give', 'take',
+            // 5-letter words
+            'about', 'above', 'abuse', 'actor', 'admit', 'adopt', 'adult', 'after', 'again',
+            'agent', 'agree', 'ahead', 'alarm', 'album', 'alien', 'align', 'alike', 'alive',
+            'allow', 'alone', 'along', 'alter', 'among', 'angel', 'anger', 'angle', 'angry',
+            'apart', 'apple', 'apply', 'arena', 'argue', 'arise', 'armor', 'array', 'arrow',
+            'aside', 'asset', 'avoid', 'award', 'aware', 'awful', 'basic', 'basis', 'beach',
+            'began', 'begin', 'being', 'below', 'bench', 'birth', 'black', 'blade', 'blame',
+            'blank', 'blast', 'blend', 'bless', 'blind', 'block', 'blood', 'blown', 'board',
+            'boost', 'booth', 'bound', 'brain', 'brand', 'brass', 'brave', 'bread', 'break',
+            'breed', 'brick', 'bride', 'brief', 'bring', 'broad', 'broke', 'brown', 'brush',
+            'build', 'built', 'bunch', 'burst', 'buyer', 'cabin', 'cable', 'carry', 'catch',
+            'cause', 'chain', 'chair', 'chaos', 'charm', 'chart', 'chase', 'cheap', 'check',
+            'chest', 'chief', 'child', 'china', 'chose', 'chunk', 'civic', 'civil', 'claim',
+            'class', 'clean', 'clear', 'clerk', 'click', 'cliff', 'climb', 'clock', 'close',
+            'cloth', 'cloud', 'coach', 'coast', 'color', 'couch', 'could', 'count', 'court',
+            'cover', 'crack', 'craft', 'crash', 'crazy', 'cream', 'creek', 'crime', 'crisp',
+            'cross', 'crowd', 'crown', 'cruel', 'crush', 'curve', 'cycle', 'daily', 'dance',
+            'dated', 'dealt', 'death', 'debut', 'delay', 'depth', 'devil', 'dirty', 'doubt',
+            'dozen', 'draft', 'drain', 'drama', 'drank', 'drawn', 'dream', 'dress', 'dried',
+            'drift', 'drill', 'drink', 'drive', 'drown', 'drove', 'dying', 'eager', 'early',
+            'earth', 'eight', 'elect', 'elite', 'empty', 'enemy', 'enjoy', 'enter', 'entry',
+            'equal', 'error', 'essay', 'event', 'every', 'exact', 'exist', 'extra', 'faith',
+            'false', 'fancy', 'fault', 'favor', 'feast', 'fence', 'fever', 'fiber', 'field',
+            'fifth', 'fifty', 'fight', 'final', 'first', 'fixed', 'flame', 'flash', 'flesh',
+            'float', 'flood', 'floor', 'flour', 'fluid', 'focus', 'force', 'forth', 'forty',
+            'forum', 'found', 'frame', 'frank', 'fraud', 'fresh', 'front', 'frost', 'fruit',
+            'fully', 'funny', 'ghost', 'giant', 'given', 'glass', 'globe', 'glory', 'going',
+            'grace', 'grade', 'grain', 'grand', 'grant', 'grape', 'graph', 'grasp', 'grass',
+            'grave', 'great', 'green', 'greet', 'grief', 'grill', 'grind', 'gross', 'group',
+            'grove', 'grown', 'guard', 'guess', 'guest', 'guide', 'guilt', 'happy', 'harsh',
+            'haven', 'heart', 'heavy', 'hello', 'hence', 'horse', 'hotel', 'house', 'human',
+            'humor', 'ideal', 'image', 'imply', 'index', 'inner', 'input', 'irony', 'issue',
+            'japan', 'joint', 'jones', 'judge', 'juice', 'known', 'label', 'labor', 'large',
+            'laser', 'later', 'laugh', 'layer', 'learn', 'lease', 'least', 'leave', 'legal',
+            'lemon', 'level', 'light', 'limit', 'liver', 'local', 'lodge', 'logic', 'loose',
+            'loser', 'lover', 'lower', 'loyal', 'lucky', 'lunch', 'lying', 'magic', 'major',
+            'maker', 'march', 'marry', 'match', 'maybe', 'mayor', 'meant', 'medal', 'media',
+            'mercy', 'merge', 'merit', 'merry', 'metal', 'meter', 'midst', 'might', 'minor',
+            'minus', 'mixed', 'model', 'money', 'month', 'moral', 'motor', 'mount', 'mouse',
+            'mouth', 'movie', 'music', 'naked', 'naval', 'nerve', 'never', 'newly', 'night',
+            'noble', 'noise', 'north', 'noted', 'novel', 'nurse', 'occur', 'ocean', 'offer',
+            'often', 'olive', 'onion', 'opera', 'orbit', 'order', 'organ', 'other', 'ought',
+            'outer', 'owner', 'paint', 'panel', 'panic', 'paper', 'party', 'pasta', 'patch',
+            'pause', 'peace', 'peach', 'pearl', 'penny', 'phase', 'phone', 'photo', 'piano',
+            'piece', 'pilot', 'pinch', 'pitch', 'pizza', 'place', 'plain', 'plane', 'plant',
+            'plate', 'plaza', 'point', 'polar', 'porch', 'pound', 'power', 'press', 'price',
+            'pride', 'prime', 'print', 'prior', 'prize', 'probe', 'proof', 'proud', 'prove',
+            'pulse', 'punch', 'pupil', 'queen', 'query', 'quest', 'quick', 'quiet', 'quite',
+            'quote', 'radar', 'radio', 'raise', 'rally', 'ranch', 'range', 'rapid', 'ratio',
+            'reach', 'react', 'ready', 'realm', 'rebel', 'refer', 'reign', 'relax', 'renew',
+            'reply', 'rider', 'ridge', 'rifle', 'right', 'rival', 'river', 'robot', 'rocky',
+            'roman', 'rough', 'round', 'route', 'royal', 'rugby', 'rural', 'saint', 'salad',
+            'salon', 'sandy', 'sauce', 'saved', 'scale', 'scare', 'scene', 'scent', 'score',
+            'scout', 'screw', 'seize', 'sense', 'serve', 'setup', 'seven', 'shade', 'shake',
+            'shall', 'shame', 'shape', 'share', 'shark', 'sharp', 'sheep', 'sheer', 'sheet',
+            'shelf', 'shell', 'shift', 'shine', 'shirt', 'shock', 'shoot', 'shore', 'short',
+            'shout', 'shown', 'sight', 'silly', 'simon', 'since', 'sixth', 'sixty', 'sized',
+            'skill', 'slave', 'sleep', 'slice', 'slide', 'slope', 'small', 'smart', 'smell',
+            'smile', 'smoke', 'snake', 'solar', 'solid', 'solve', 'sorry', 'sound', 'south',
+            'space', 'spare', 'spark', 'speak', 'speed', 'spell', 'spend', 'spent', 'spice',
+            'spite', 'split', 'spoke', 'sport', 'spray', 'squad', 'stack', 'staff', 'stage',
+            'stain', 'stake', 'stamp', 'stand', 'stark', 'start', 'state', 'stays', 'steam',
+            'steel', 'steep', 'steer', 'stern', 'stick', 'stiff', 'still', 'stock', 'stone',
+            'stood', 'stool', 'store', 'storm', 'story', 'strip', 'stuck', 'study', 'stuff',
+            'style', 'sugar', 'suite', 'sunny', 'super', 'surge', 'swear', 'sweat', 'sweep',
+            'sweet', 'swept', 'swift', 'swing', 'sword', 'sworn', 'table', 'taken', 'taste',
+            'taxes', 'teach', 'teeth', 'tempo', 'tends', 'tenor', 'tense', 'tenth', 'terms',
+            'texas', 'thank', 'theft', 'their', 'theme', 'there', 'these', 'thick', 'thief',
+            'thing', 'think', 'third', 'those', 'three', 'threw', 'throw', 'thumb', 'tiger',
+            'tight', 'timer', 'title', 'today', 'token', 'tooth', 'topic', 'total', 'touch',
+            'tough', 'tower', 'trace', 'track', 'trade', 'trail', 'train', 'trait', 'trash',
+            'treat', 'trend', 'trial', 'tribe', 'trick', 'tried', 'tries', 'troop', 'truck',
+            'truly', 'trunk', 'trust', 'truth', 'tumor', 'tutor', 'twice', 'twist', 'under',
+            'undue', 'union', 'unite', 'unity', 'until', 'upper', 'upset', 'urban', 'usage',
+            'usual', 'valid', 'value', 'valve', 'vapor', 'verse', 'video', 'virus', 'visit',
+            'vista', 'vital', 'vivid', 'vocal', 'vogue', 'voice', 'voter', 'wagon', 'waste',
+            'watch', 'water', 'weary', 'wheel', 'where', 'which', 'while', 'white', 'whole',
+            'whose', 'woman', 'world', 'worry', 'worse', 'worst', 'worth', 'would', 'wound',
+            'wrist', 'write', 'wrong', 'wrote', 'yield', 'young', 'youth',
+            // 6+ letter words commonly used in phrases
+            'friend', 'always', 'before', 'people', 'should', 'through', 'really', 'better',
+            'family', 'moment', 'person', 'things', 'little', 'around', 'simple', 'change',
+            'action', 'speaks', 'louder', 'words', 'practice', 'makes', 'perfect', 'actions',
+            'beauty', 'beholder', 'birds', 'feather', 'flock', 'together', 'blood', 'thicker',
+            'broken', 'clock', 'twice', 'curiosity', 'killed', 'early', 'catches', 'worm',
+            'every', 'cloud', 'silver', 'lining', 'fortune', 'favors', 'brave', 'grass',
+            'greener', 'other', 'side', 'knowledge', 'power', 'laughter', 'medicine',
+            'money', 'talks', 'necessity', 'mother', 'invention', 'penny', 'saved', 'earned',
+            'picture', 'thousand', 'silence', 'golden', 'squeaky', 'wheel', 'gets', 'grease',
+            'stitch', 'time', 'saves', 'nine', 'rolling', 'stone', 'gathers', 'moss',
+            'apple', 'doctor', 'keeps', 'barking', 'seldom', 'bites', 'strike', 'iron',
+            'absence', 'heart', 'grow', 'fonder', 'bitter', 'pill', 'swallow', 'blessing',
+            'disguise', 'bold', 'beautiful', 'break', 'camel', 'last', 'straw', 'calm',
+            'storm', 'charity', 'begins', 'home', 'cleanliness', 'godliness', 'count',
+            'chickens', 'hatch', 'different', 'strokes', 'folks', 'doubt', 'without',
+            'easier', 'said', 'done', 'empty', 'vessels', 'noise', 'enough', 'rope',
+            'hang', 'himself', 'fair', 'weather', 'fish', 'plenty', 'fool', 'parted',
+            'forbidden', 'fruit', 'sweetest', 'forgive', 'forget', 'give', 'inch', 'mile',
+            'hands', 'idle', 'devil', 'workshop', 'haste', 'waste', 'history', 'repeats',
+            'itself', 'honest', 'policy', 'ignorance', 'bliss', 'jack', 'trades', 'master',
+            'none', 'killing', 'kindness', 'learning', 'process', 'leopard', 'spots',
+            'less', 'more', 'look', 'leap', 'lose', 'battle', 'misery', 'loves', 'company',
+            'need', 'friend', 'indeed', 'news', 'good', 'object', 'lesson', 'once', 'bitten',
+            'twice', 'shy', 'ounce', 'prevention', 'pound', 'cure', 'patience', 'virtue',
+            'pays', 'pride', 'fall', 'proof', 'pudding', 'eating', 'rome', 'built',
+            'rotten', 'spoils', 'bunch', 'seeing', 'believing', 'slow', 'steady', 'wins',
+            'race', 'speak', 'mind', 'thinking', 'truth', 'hurts', 'variety', 'spice',
+            'life', 'walls', 'ears', 'water', 'bridge', 'wise', 'ways', 'yourself',
+            'best', 'mans', 'think', 'therefore', 'exist', 'carpe', 'diem', 'seize',
+            'veni', 'vidi', 'vici', 'came', 'conquered', 'love', 'hate', 'live', 'laugh',
+            'dream', 'believe', 'achieve', 'impossible', 'nothing', 'everything', 'possible'
+        ]);
+
+        // Level clues - phrases to construct
+        const LEVELS = [
+            { clue: "What you say when someone helps you", answer: ["thank", "you"], minWords: 2 },
+            { clue: "Greeting in the morning", answer: ["good", "morning"], minWords: 2 },
+            { clue: "What do you call a man's closest companion?", answer: ["best", "friend"], minWords: 2 },
+            { clue: "The truth can be painful", answer: ["truth", "hurts"], minWords: 2 },
+            { clue: "Seeing is...", answer: ["seeing", "is", "believing"], minWords: 2 },
+            { clue: "What makes perfect?", answer: ["practice", "makes", "perfect"], minWords: 2 },
+            { clue: "Slow and steady wins the...", answer: ["slow", "steady", "wins", "race"], minWords: 3 },
+            { clue: "An apple a day keeps the doctor...", answer: ["apple", "day", "doctor", "away"], minWords: 3 },
+            { clue: "Knowledge is...", answer: ["knowledge", "is", "power"], minWords: 2 },
+            { clue: "Actions speak louder than...", answer: ["actions", "speak", "louder", "words"], minWords: 3 },
+            { clue: "What does laughter do?", answer: ["laughter", "best", "medicine"], minWords: 2 },
+            { clue: "Time flies when you're having...", answer: ["time", "flies", "fun"], minWords: 2 },
+            { clue: "Home is where the heart...", answer: ["home", "heart", "is"], minWords: 2 },
+            { clue: "A penny saved is a penny...", answer: ["penny", "saved", "earned"], minWords: 2 },
+            { clue: "The early bird catches the...", answer: ["early", "bird", "catches", "worm"], minWords: 3 },
+            { clue: "Every cloud has a silver...", answer: ["cloud", "silver", "lining"], minWords: 2 },
+            { clue: "Better late than...", answer: ["better", "late", "never"], minWords: 2 },
+            { clue: "When in Rome, do as the Romans...", answer: ["rome", "romans", "do"], minWords: 2 },
+            { clue: "Curiosity killed the...", answer: ["curiosity", "killed", "cat"], minWords: 2 },
+            { clue: "Birds of a feather flock...", answer: ["birds", "feather", "flock", "together"], minWords: 3 },
+        ];
+
+        // Game configuration
+        const CONFIG = {
+            gridRows: 6,
+            gridCols: 7,
+            fallSpeed: 2000, // ms between row drops
+            minWordLength: 3
+        };
+
+        // Game state
+        let gameState = {
+            level: 1,
+            score: 0,
+            currentClue: null,
+            grid: [],
+            fallingRow: null,
+            fallingRowIndex: -1,
+            stackedRows: 0,
+            foundWords: [],
+            selectedWords: [],
+            phase: 'falling', // 'falling' or 'words'
+            fallInterval: null,
+            isPlaying: false
+        };
+
+        // DOM Elements
+        const gridContainer = document.getElementById('grid-container');
+        const wordPhase = document.getElementById('word-phase');
+        const foundWordsContainer = document.getElementById('found-words');
+        const answerWordsContainer = document.getElementById('answer-words');
+        const clueText = document.getElementById('clue-text');
+        const tapHint = document.getElementById('tap-hint');
+        const levelDisplay = document.getElementById('level');
+        const scoreDisplay = document.getElementById('score');
+        const rowsLeftDisplay = document.getElementById('rows-left');
+        const submitBtn = document.getElementById('submit-btn');
+        const clearBtn = document.getElementById('clear-btn');
+
+        // Screens
+        const startScreen = document.getElementById('start-screen');
+        const levelCompleteScreen = document.getElementById('level-complete-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+
+        // Initialize game
+        function init() {
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('next-level-btn').addEventListener('click', nextLevel);
+            document.getElementById('restart-btn').addEventListener('click', restartGame);
+            submitBtn.addEventListener('click', submitAnswer);
+            clearBtn.addEventListener('click', clearAnswer);
+        }
+
+        function startGame() {
+            gameState = {
+                level: 1,
+                score: 0,
+                currentClue: null,
+                grid: [],
+                fallingRow: null,
+                fallingRowIndex: -1,
+                stackedRows: 0,
+                foundWords: [],
+                selectedWords: [],
+                phase: 'falling',
+                fallInterval: null,
+                isPlaying: true
+            };
+
+            updateUI();
+            startScreen.classList.add('hidden');
+            loadLevel();
+        }
+
+        function loadLevel() {
+            // Reset state for new level
+            gameState.grid = [];
+            gameState.fallingRow = null;
+            gameState.fallingRowIndex = -1;
+            gameState.stackedRows = 0;
+            gameState.foundWords = [];
+            gameState.selectedWords = [];
+            gameState.phase = 'falling';
+
+            // Initialize empty grid
+            for (let i = 0; i < CONFIG.gridRows; i++) {
+                gameState.grid.push(new Array(CONFIG.gridCols).fill(null));
+            }
+
+            // Get level clue
+            const levelIndex = (gameState.level - 1) % LEVELS.length;
+            gameState.currentClue = LEVELS[levelIndex];
+
+            // Update clue display
+            clueText.textContent = gameState.currentClue.clue;
+            tapHint.style.display = 'block';
+
+            // Hide word phase
+            wordPhase.classList.remove('active');
+
+            // Render grid
+            renderGrid();
+            updateUI();
+
+            // Start falling rows
+            spawnFallingRow();
+            startFalling();
+        }
+
+        function renderGrid() {
+            gridContainer.innerHTML = '';
+
+            for (let row = 0; row < CONFIG.gridRows; row++) {
+                const rowEl = document.createElement('div');
+                rowEl.className = 'letter-row';
+                rowEl.dataset.row = row;
+
+                for (let col = 0; col < CONFIG.gridCols; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'letter-cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+
+                    const letter = gameState.grid[row][col];
+                    if (letter) {
+                        cell.textContent = letter;
+                        cell.classList.add('filled');
+                    }
+
+                    rowEl.appendChild(cell);
+                }
+
+                gridContainer.appendChild(rowEl);
+            }
+
+            // Render falling row if exists
+            if (gameState.fallingRow && gameState.fallingRowIndex >= 0) {
+                const rowEl = gridContainer.children[gameState.fallingRowIndex];
+                if (rowEl) {
+                    rowEl.classList.add('falling');
+                    rowEl.addEventListener('click', shuffleFallingRow);
+                    rowEl.addEventListener('touchstart', shuffleFallingRow);
+
+                    const cells = rowEl.querySelectorAll('.letter-cell');
+                    cells.forEach((cell, col) => {
+                        cell.textContent = gameState.fallingRow[col];
+                        cell.classList.add('falling');
+                        cell.classList.remove('filled');
+                    });
+                }
+            }
+        }
+
+        function generateRandomRow() {
+            const answer = gameState.currentClue.answer;
+            const row = [];
+
+            // Include some letters from the answer words
+            const answerLetters = answer.join('').toUpperCase().split('');
+
+            // Fill row with mix of answer letters and random letters
+            for (let i = 0; i < CONFIG.gridCols; i++) {
+                if (Math.random() < 0.5 && answerLetters.length > 0) {
+                    // Pick from answer letters
+                    const idx = Math.floor(Math.random() * answerLetters.length);
+                    row.push(answerLetters[idx]);
+                } else {
+                    // Random letter with vowel bias
+                    const vowels = 'AEIOU';
+                    const consonants = 'BCDFGHJKLMNPQRSTVWXYZ';
+                    if (Math.random() < 0.35) {
+                        row.push(vowels[Math.floor(Math.random() * vowels.length)]);
+                    } else {
+                        row.push(consonants[Math.floor(Math.random() * consonants.length)]);
+                    }
+                }
+            }
+
+            return row;
+        }
+
+        function spawnFallingRow() {
+            gameState.fallingRow = generateRandomRow();
+            gameState.fallingRowIndex = 0;
+            renderGrid();
+        }
+
+        function startFalling() {
+            if (gameState.fallInterval) {
+                clearInterval(gameState.fallInterval);
+            }
+
+            const speed = Math.max(CONFIG.fallSpeed - (gameState.level * 150), 800);
+            gameState.fallInterval = setInterval(dropRow, speed);
+        }
+
+        function dropRow() {
+            if (!gameState.isPlaying || gameState.phase !== 'falling') return;
+
+            const nextRow = gameState.fallingRowIndex + 1;
+
+            // Check if can drop further
+            if (nextRow >= CONFIG.gridRows || gameState.grid[nextRow].some(cell => cell !== null)) {
+                // Lock the row in place
+                gameState.grid[gameState.fallingRowIndex] = [...gameState.fallingRow];
+                gameState.stackedRows++;
+                updateUI();
+
+                // Check if grid is full
+                if (gameState.stackedRows >= CONFIG.gridRows) {
+                    // Grid is full - enter word finding phase
+                    enterWordPhase();
+                } else {
+                    // Spawn new falling row
+                    spawnFallingRow();
+                }
+            } else {
+                // Move row down
+                gameState.fallingRowIndex = nextRow;
+                renderGrid();
+            }
+        }
+
+        function shuffleFallingRow(e) {
+            e.preventDefault();
+            if (!gameState.fallingRow || gameState.phase !== 'falling') return;
+
+            // Shuffle the letters
+            for (let i = gameState.fallingRow.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [gameState.fallingRow[i], gameState.fallingRow[j]] =
+                [gameState.fallingRow[j], gameState.fallingRow[i]];
+            }
+
+            // Add shuffle animation
+            const rowEl = gridContainer.children[gameState.fallingRowIndex];
+            if (rowEl) {
+                rowEl.classList.add('shuffling');
+                setTimeout(() => rowEl.classList.remove('shuffling'), 200);
+            }
+
+            renderGrid();
+        }
+
+        function enterWordPhase() {
+            clearInterval(gameState.fallInterval);
+            gameState.phase = 'words';
+            gameState.fallingRow = null;
+            gameState.fallingRowIndex = -1;
+
+            tapHint.style.display = 'none';
+
+            // Find all valid words in the grid
+            findAllWords();
+
+            // Show word phase UI
+            wordPhase.classList.add('active');
+            renderFoundWords();
+            renderGrid();
+        }
+
+        function findAllWords() {
+            gameState.foundWords = [];
+            const found = new Set();
+
+            // Search horizontally
+            for (let row = 0; row < CONFIG.gridRows; row++) {
+                const rowLetters = gameState.grid[row].join('');
+                findWordsInString(rowLetters, found);
+            }
+
+            // Search vertically
+            for (let col = 0; col < CONFIG.gridCols; col++) {
+                let colLetters = '';
+                for (let row = 0; row < CONFIG.gridRows; row++) {
+                    colLetters += gameState.grid[row][col] || '';
+                }
+                findWordsInString(colLetters, found);
+            }
+
+            // Search diagonally (top-left to bottom-right)
+            for (let startRow = 0; startRow < CONFIG.gridRows; startRow++) {
+                let diag = '';
+                let row = startRow, col = 0;
+                while (row < CONFIG.gridRows && col < CONFIG.gridCols) {
+                    diag += gameState.grid[row][col] || '';
+                    row++;
+                    col++;
+                }
+                findWordsInString(diag, found);
+            }
+            for (let startCol = 1; startCol < CONFIG.gridCols; startCol++) {
+                let diag = '';
+                let row = 0, col = startCol;
+                while (row < CONFIG.gridRows && col < CONFIG.gridCols) {
+                    diag += gameState.grid[row][col] || '';
+                    row++;
+                    col++;
+                }
+                findWordsInString(diag, found);
+            }
+
+            // Search diagonally (top-right to bottom-left)
+            for (let startRow = 0; startRow < CONFIG.gridRows; startRow++) {
+                let diag = '';
+                let row = startRow, col = CONFIG.gridCols - 1;
+                while (row < CONFIG.gridRows && col >= 0) {
+                    diag += gameState.grid[row][col] || '';
+                    row++;
+                    col--;
+                }
+                findWordsInString(diag, found);
+            }
+            for (let startCol = CONFIG.gridCols - 2; startCol >= 0; startCol--) {
+                let diag = '';
+                let row = 0, col = startCol;
+                while (row < CONFIG.gridRows && col >= 0) {
+                    diag += gameState.grid[row][col] || '';
+                    row++;
+                    col--;
+                }
+                findWordsInString(diag, found);
+            }
+
+            // Also find words using any combination of letters in the grid
+            const allLetters = gameState.grid.flat().filter(l => l).join('');
+            findWordsFromLetters(allLetters, found);
+
+            gameState.foundWords = Array.from(found).sort((a, b) => b.length - a.length);
+        }
+
+        function findWordsInString(str, foundSet) {
+            const s = str.toLowerCase();
+            // Check all substrings
+            for (let i = 0; i < s.length; i++) {
+                for (let len = CONFIG.minWordLength; len <= s.length - i; len++) {
+                    const word = s.substring(i, i + len);
+                    if (VALID_WORDS.has(word)) {
+                        foundSet.add(word);
+                    }
+                }
+            }
+            // Also check reversed
+            const rev = s.split('').reverse().join('');
+            for (let i = 0; i < rev.length; i++) {
+                for (let len = CONFIG.minWordLength; len <= rev.length - i; len++) {
+                    const word = rev.substring(i, i + len);
+                    if (VALID_WORDS.has(word)) {
+                        foundSet.add(word);
+                    }
+                }
+            }
+        }
+
+        function findWordsFromLetters(letters, foundSet) {
+            const letterCount = {};
+            for (const l of letters.toLowerCase()) {
+                letterCount[l] = (letterCount[l] || 0) + 1;
+            }
+
+            // Check each valid word to see if it can be formed
+            for (const word of VALID_WORDS) {
+                if (word.length >= CONFIG.minWordLength && canFormWord(word, { ...letterCount })) {
+                    foundSet.add(word);
+                }
+            }
+        }
+
+        function canFormWord(word, letterCount) {
+            const needed = {};
+            for (const l of word) {
+                needed[l] = (needed[l] || 0) + 1;
+            }
+
+            for (const [letter, count] of Object.entries(needed)) {
+                if (!letterCount[letter] || letterCount[letter] < count) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function renderFoundWords() {
+            foundWordsContainer.innerHTML = '';
+
+            gameState.foundWords.forEach(word => {
+                const chip = document.createElement('div');
+                chip.className = 'word-chip';
+                chip.textContent = word;
+
+                if (gameState.selectedWords.includes(word)) {
+                    chip.classList.add('used');
+                }
+
+                chip.addEventListener('click', () => selectWord(word));
+                foundWordsContainer.appendChild(chip);
+            });
+
+            renderAnswerWords();
+        }
+
+        function selectWord(word) {
+            if (gameState.selectedWords.includes(word)) return;
+
+            gameState.selectedWords.push(word);
+            renderFoundWords();
+            checkSubmitEnabled();
+        }
+
+        function removeWord(index) {
+            gameState.selectedWords.splice(index, 1);
+            renderFoundWords();
+            checkSubmitEnabled();
+        }
+
+        function renderAnswerWords() {
+            answerWordsContainer.innerHTML = '';
+
+            gameState.selectedWords.forEach((word, index) => {
+                const wordEl = document.createElement('div');
+                wordEl.className = 'answer-word';
+                wordEl.textContent = word;
+                wordEl.addEventListener('click', () => removeWord(index));
+                answerWordsContainer.appendChild(wordEl);
+            });
+        }
+
+        function checkSubmitEnabled() {
+            submitBtn.disabled = gameState.selectedWords.length < gameState.currentClue.minWords;
+        }
+
+        function clearAnswer() {
+            gameState.selectedWords = [];
+            renderFoundWords();
+            checkSubmitEnabled();
+        }
+
+        function submitAnswer() {
+            const answer = gameState.selectedWords;
+            const expected = gameState.currentClue.answer;
+
+            // Check if all expected words are present (order doesn't matter for partial credit)
+            let matchCount = 0;
+            for (const word of expected) {
+                if (answer.includes(word.toLowerCase())) {
+                    matchCount++;
+                }
+            }
+
+            const matchRatio = matchCount / expected.length;
+
+            if (matchRatio >= 0.5) {
+                // Good enough - level complete!
+                const bonus = Math.floor(500 * matchRatio) + (gameState.level * 50);
+                gameState.score += bonus;
+                updateUI();
+
+                showLevelComplete(answer.join(' ').toUpperCase(), bonus);
+            } else {
+                // Not quite - show feedback but let them try again
+                gameState.selectedWords = [];
+                renderFoundWords();
+
+                // Visual feedback
+                answerWordsContainer.style.animation = 'shake 0.5s';
+                setTimeout(() => {
+                    answerWordsContainer.style.animation = '';
+                }, 500);
+            }
+        }
+
+        function showLevelComplete(answer, bonus) {
+            gameState.isPlaying = false;
+
+            document.getElementById('answer-reveal').textContent = answer;
+            document.getElementById('level-score').textContent = `+${bonus} points`;
+            levelCompleteScreen.classList.remove('hidden');
+        }
+
+        function nextLevel() {
+            levelCompleteScreen.classList.add('hidden');
+            gameState.level++;
+            gameState.isPlaying = true;
+            updateUI();
+            loadLevel();
+        }
+
+        function gameOver() {
+            gameState.isPlaying = false;
+            clearInterval(gameState.fallInterval);
+
+            document.getElementById('final-score').textContent = gameState.score;
+            document.getElementById('levels-completed').textContent = `Levels completed: ${gameState.level - 1}`;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function restartGame() {
+            gameOverScreen.classList.add('hidden');
+            startGame();
+        }
+
+        function updateUI() {
+            levelDisplay.textContent = gameState.level;
+            scoreDisplay.textContent = gameState.score;
+            rowsLeftDisplay.textContent = CONFIG.gridRows - gameState.stackedRows;
+        }
+
+        // Add shake animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-10px); }
+                75% { transform: translateX(10px); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Start
+        init();
+    </script>
+</body>
+</html>
