@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WordStax</title>
+    <style>
+        * {
+            margin: 0; padding: 0; box-sizing: border-box;
+            user-select: none; -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh; overflow: hidden; color: #fff;
+        }
+        #game-container {
+            display: flex; flex-direction: column; align-items: center;
+            height: 100vh; height: 100dvh; padding: 8px;
+            max-width: 500px; margin: 0 auto;
+        }
+        #header {
+            display: flex; justify-content: space-between; align-items: center;
+            width: 100%; padding: 8px 16px;
+            background: rgba(255,255,255,0.1); border-radius: 12px; margin-bottom: 6px;
+        }
+        .stat { text-align: center; }
+        .stat-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-size: 22px; font-weight: bold; color: #4ecca3; }
+
+        #phase-indicator {
+            background: rgba(102,126,234,0.2); border: 2px solid #667eea;
+            border-radius: 10px; padding: 6px 20px; margin-bottom: 6px;
+            text-align: center; width: 100%;
+        }
+        #phase-indicator.placing { border-color: #e94560; background: rgba(233,69,96,0.2); }
+        #phase-indicator.finding { border-color: #4ecca3; background: rgba(78,204,163,0.2); }
+        #phase-text { font-size: 14px; font-weight: bold; }
+        #phase-hint { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+        #canvas-wrapper {
+            flex: 1; display: flex; justify-content: center; align-items: center;
+            width: 100%; min-height: 0; padding: 6px;
+        }
+        #canvas-area {
+            position: relative; aspect-ratio: 10 / 8;
+            width: 100%; max-height: 100%;
+            background: rgba(0,0,0,0.4); border-radius: 12px;
+            border: 3px solid rgba(78,204,163,0.4);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            display: flex; justify-content: center; align-items: center;
+        }
+        #grid-container {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            gap: 3px; width: 96%; height: 96%;
+        }
+        .grid-cell {
+            background: rgba(255,255,255,0.05); border-radius: 3px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: min(16px, 3.8vmin); font-weight: bold;
+            color: transparent; transition: all 0.15s ease;
+            aspect-ratio: 1; position: relative;
+        }
+        .grid-cell.filled {
+            background: linear-gradient(145deg, #3a4a6b, #2a3a5b); color: #fff;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .grid-cell.highlight-preview {
+            background: linear-gradient(145deg, #4ecca3, #3db892); color: #fff;
+            box-shadow: 0 0 12px rgba(78,204,163,0.5);
+        }
+        .grid-cell.selected {
+            background: linear-gradient(145deg, #667eea, #5a6fd6) !important;
+            color: #fff !important; transform: scale(1.05); z-index: 10;
+        }
+        .grid-cell.word-found {
+            animation: wordPop 0.4s ease-out;
+            background: linear-gradient(145deg, #FFD700, #FFA500) !important;
+            color: #000 !important; transform: scale(1.1); z-index: 20;
+        }
+        .grid-cell.missed-word { border: 2px dashed #FF6B6B; }
+        @keyframes wordPop {
+            0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); }
+        }
+
+        /* Shape dock — 3 shape previews */
+        #shape-dock {
+            width: 100%; background: rgba(0,0,0,0.3);
+            border-top: 2px solid rgba(255,255,255,0.1);
+            padding: 10px 8px; display: flex;
+            justify-content: space-around; align-items: center;
+            min-height: 90px; gap: 8px;
+        }
+        .shape-slot {
+            flex: 1; display: flex; justify-content: center; align-items: center;
+            padding: 8px; border-radius: 10px; cursor: pointer;
+            transition: all 0.2s; min-height: 70px;
+            background: rgba(255,255,255,0.03); border: 2px solid transparent;
+        }
+        .shape-slot:hover { background: rgba(255,255,255,0.08); }
+        .shape-slot.selected-slot {
+            border-color: #4ecca3; background: rgba(78,204,163,0.15);
+            box-shadow: 0 0 15px rgba(78,204,163,0.3);
+        }
+        .shape-slot.placed { opacity: 0.15; cursor: default; pointer-events: none; }
+        .shape-preview { display: grid; gap: 2px; }
+        .preview-cell {
+            width: 12px; height: 12px;
+            background: linear-gradient(145deg, #e94560, #c73e54); border-radius: 2px;
+        }
+        .shape-slot.placed .preview-cell { background: rgba(255,255,255,0.3); }
+
+        /* Targets panel (Phase 2) */
+        #targets-panel {
+            width: 100%; padding: 8px;
+            background: rgba(255,255,255,0.1); border-radius: 10px; display: none;
+        }
+        #targets-list { display: flex; flex-wrap: wrap; gap: 5px; max-height: 15vh; overflow-y: auto; }
+        .target-word {
+            padding: 5px 10px; background: rgba(255,255,255,0.1); border-radius: 12px;
+            font-size: 11px; font-weight: bold; color: #888;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .target-word.found { background: linear-gradient(145deg, #4ecca3, #3db892); color: #1a1a2e; }
+        .target-word.bonus { background: linear-gradient(145deg, #667eea, #5a6fd6); color: #fff; }
+
+        #word-display {
+            position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); padding: 6px 18px; border-radius: 20px;
+            font-size: 22px; font-weight: bold; letter-spacing: 2px;
+            color: #fff; opacity: 0; transition: opacity 0.2s;
+            pointer-events: none; z-index: 50;
+        }
+        #word-display.visible { opacity: 1; }
+        #word-display.valid { color: #4ecca3; box-shadow: 0 0 15px rgba(78,204,163,0.5); }
+
+        #action-buttons { display: flex; gap: 8px; margin-top: 6px; width: 100%; }
+        button {
+            flex: 1; padding: 10px 16px; font-size: 13px; font-weight: bold;
+            border: none; border-radius: 20px; cursor: pointer;
+            transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px;
+        }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        #done-btn { background: linear-gradient(145deg, #4ecca3, #3db892); color: #1a1a2e; }
+        #give-up-btn {
+            background: linear-gradient(180deg, #ff6b6b, #ee5253);
+            border-bottom: 3px solid #c0392b; color: #fff; display: none;
+        }
+
+        #drag-shape { position: fixed; pointer-events: none; z-index: 1000; display: none; }
+        #drag-shape.active { display: grid; }
+        #drag-shape .drag-cell {
+            background: linear-gradient(145deg, #e94560, #c73e54);
+            border-radius: 3px; box-shadow: 0 4px 15px rgba(233,69,96,0.5);
+        }
+
+        .screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            z-index: 2000; transition: opacity 0.3s, visibility 0.3s; padding: 20px;
+        }
+        .screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        .screen h1 {
+            font-size: 42px; margin-bottom: 10px;
+            background: linear-gradient(145deg, #4ecca3, #667eea);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .screen h2 { font-size: 28px; color: #4ecca3; margin-bottom: 20px; }
+        .screen p { font-size: 16px; color: #aaa; text-align: center; max-width: 320px; margin-bottom: 15px; line-height: 1.5; }
+        .screen button {
+            padding: 15px 50px; font-size: 18px;
+            background: linear-gradient(145deg, #e94560, #c73e54); color: #fff; margin-top: 20px;
+        }
+
+        #summary-box {
+            background: rgba(255,255,255,0.1); border-radius: 15px;
+            padding: 20px; margin: 20px 0; text-align: center; min-width: 280px;
+        }
+        #summary-emojis { font-size: 36px; margin-bottom: 15px; letter-spacing: 8px; }
+        #summary-stats { display: flex; flex-direction: column; gap: 8px; }
+        .summary-stat { display: flex; justify-content: space-between; font-size: 14px; }
+        .summary-stat-label { color: #888; }
+        .summary-stat-value { color: #4ecca3; font-weight: bold; }
+        #share-text {
+            background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px;
+            font-family: monospace; font-size: 12px; margin-top: 15px; cursor: pointer;
+        }
+
+        .instructions {
+            background: rgba(255,255,255,0.1); border-radius: 15px;
+            padding: 20px; max-width: 320px; margin: 15px 0;
+        }
+        .instructions h3 { color: #4ecca3; margin-bottom: 15px; font-size: 16px; }
+        .instructions ul { list-style: none; }
+        .instructions li {
+            margin: 10px 0; padding-left: 25px; position: relative;
+            color: #ccc; font-size: 13px; line-height: 1.4;
+        }
+        .instructions li::before { content: "\2192"; position: absolute; left: 0; color: #e94560; }
+
+        .floating-score {
+            position: fixed; pointer-events: none; font-size: 24px; font-weight: bold;
+            color: #4ecca3; text-shadow: 0 2px 10px rgba(78,204,163,0.8);
+            animation: floatUp 1s ease-out forwards; z-index: 1500;
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-50px) scale(1.2); }
+        }
+        @keyframes snapIn {
+            0% { transform: scale(1.1); } 50% { transform: scale(0.95); } 100% { transform: scale(1); }
+        }
+        .snap-in { animation: snapIn 0.2s ease-out; }
+
+        #words-formed-display {
+            width: 100%; margin-top: 4px; padding: 8px;
+            background: rgba(255,255,255,0.1); border-radius: 10px;
+            text-align: center; font-size: 14px; color: #4ecca3; font-weight: bold;
+        }
+
+        @media (max-height: 650px) {
+            #shape-dock { min-height: 70px; padding: 6px; }
+            .preview-cell { width: 10px; height: 10px; }
+            .shape-slot { min-height: 55px; padding: 5px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="start-screen" class="screen">
+        <h1>WordStax</h1>
+        <p>Stack letter shapes, then find hidden words!</p>
+        <div class="instructions">
+            <h3>How to Play</h3>
+            <ul>
+                <li><strong>Phase 1:</strong> Pick from 3 shapes and place them on the grid</li>
+                <li>Tap a shape to select, then drag it onto the canvas</li>
+                <li>Place all 3 to get a new set. Ends when a shape can't fit</li>
+                <li><strong>Phase 2:</strong> Drag across letters to form words</li>
+                <li>Find all target words to complete the level</li>
+            </ul>
+        </div>
+        <button id="start-btn">Start Game</button>
+    </div>
+
+    <div id="level-complete-screen" class="screen hidden">
+        <h2>Level Complete!</h2>
+        <div id="summary-box">
+            <div id="summary-emojis"></div>
+            <div id="summary-stats">
+                <div class="summary-stat"><span class="summary-stat-label">Words Found</span><span class="summary-stat-value" id="stat-words">0/0</span></div>
+                <div class="summary-stat"><span class="summary-stat-label">Bonus Words</span><span class="summary-stat-value" id="stat-bonus">0</span></div>
+                <div class="summary-stat"><span class="summary-stat-label">Canvas Fill</span><span class="summary-stat-value" id="stat-fill">0%</span></div>
+                <div class="summary-stat"><span class="summary-stat-label">Level Score</span><span class="summary-stat-value" id="stat-score">0</span></div>
+            </div>
+            <div id="share-text">Tap to copy</div>
+        </div>
+        <button id="next-level-btn">Next Level</button>
+    </div>
+
+    <div id="game-container">
+        <div id="header">
+            <div class="stat"><div class="stat-label">Level</div><div class="stat-value" id="level-display">1</div></div>
+            <div class="stat"><div class="stat-label">Score</div><div class="stat-value" id="score-display">0</div></div>
+            <div class="stat"><div class="stat-label">Shapes</div><div class="stat-value" id="shapes-display">0</div></div>
+        </div>
+        <div id="phase-indicator" class="placing">
+            <div id="phase-text">Phase 1: Place Shapes</div>
+            <div id="phase-hint">Tap a shape below, then drag it onto the grid</div>
+        </div>
+        <div id="canvas-wrapper">
+            <div id="canvas-area">
+                <div id="grid-container"></div>
+                <div id="word-display"></div>
+            </div>
+        </div>
+        <div id="shape-dock">
+            <div class="shape-slot" id="slot-0"></div>
+            <div class="shape-slot" id="slot-1"></div>
+            <div class="shape-slot" id="slot-2"></div>
+        </div>
+        <div id="targets-panel"><div id="targets-list"></div></div>
+        <div id="words-formed-display">Words Formed: 0</div>
+        <div id="action-buttons">
+            <button id="done-btn" disabled>I'm Done</button>
+            <button id="give-up-btn">Give Up</button>
+        </div>
+    </div>
+    <div id="drag-shape"></div>
+
+    <script>
+        const CONFIG = {
+            canvasWidth: 10, canvasHeight: 8,
+            minShapeSize: 2, maxShapeSize: 5,
+            vowelRatio: 0.38, commonLetterBias: 0.7,
+            minWordLength: 3, prePopulateCount: 2,
+            shapesPerSet: 3
+        };
+
+        const SHAPES = {
+            domino_h:[[0,0],[0,1]], domino_v:[[0,0],[1,0]],
+            line_h3:[[0,0],[0,1],[0,2]], line_v3:[[0,0],[1,0],[2,0]],
+            corner_br:[[0,0],[1,0],[1,1]], corner_bl:[[0,1],[1,0],[1,1]],
+            corner_tr:[[0,0],[0,1],[1,0]], corner_tl:[[0,0],[0,1],[1,1]],
+            line_h4:[[0,0],[0,1],[0,2],[0,3]], line_v4:[[0,0],[1,0],[2,0],[3,0]],
+            square:[[0,0],[0,1],[1,0],[1,1]],
+            t_down:[[0,0],[0,1],[0,2],[1,1]], t_up:[[1,0],[1,1],[1,2],[0,1]],
+            t_right:[[0,0],[1,0],[2,0],[1,1]], t_left:[[0,1],[1,0],[1,1],[2,1]],
+            l_1:[[0,0],[1,0],[2,0],[2,1]], l_2:[[0,0],[0,1],[0,2],[1,0]],
+            l_3:[[0,0],[0,1],[1,1],[2,1]], l_4:[[0,2],[1,0],[1,1],[1,2]],
+            s_h:[[0,1],[0,2],[1,0],[1,1]], s_v:[[0,0],[1,0],[1,1],[2,1]],
+            z_h:[[0,0],[0,1],[1,1],[1,2]], z_v:[[0,1],[1,0],[1,1],[2,0]],
+            plus:[[0,1],[1,0],[1,1],[1,2],[2,1]],
+            u_down:[[0,0],[0,2],[1,0],[1,1],[1,2]], u_up:[[0,0],[0,1],[0,2],[1,0],[1,2]],
+            line_h5:[[0,0],[0,1],[0,2],[0,3],[0,4]], line_v5:[[0,0],[1,0],[2,0],[3,0],[4,0]],
+            long_L:[[0,0],[1,0],[2,0],[3,0],[3,1]]
+        };
+
+        const SHAPES_BY_SIZE = {
+            2: ['domino_h','domino_v'],
+            3: ['line_h3','line_v3','corner_br','corner_bl','corner_tr','corner_tl'],
+            4: ['line_h4','line_v4','square','t_down','t_up','t_right','t_left','l_1','l_2','l_3','l_4','s_h','s_v','z_h','z_v'],
+            5: ['plus','u_down','u_up','line_h5','line_v5','long_L']
+        };
+
+        const VOWELS = 'AEIOU';
+        const CONSONANTS = 'BCDFGHJKLMNPQRSTVWXYZ';
+
+        const VALID_WORDS = new Set([
+/* DICT_PLACEHOLDER */
+        ]);
+
+        let state = {
+            level:1, score:0, phase:'placing', grid:[], shapeSet:[],
+            selectedShapeIndex:-1, shapesPlaced:0, targetWords:[],
+            foundWords:[], bonusWords:[], selectedCells:[],
+            isDragging:false, dragGridOffset:{r:0,c:0}, draggedCellIndex:-1
+        };
+
+        let gridContainer, dragShape, wordDisplay, phaseIndicator, phaseText, phaseHint;
+        let levelDisplay, scoreDisplay, shapesDisplay, targetsList, doneBtn, giveUpBtn;
+        let wordFindingSetup = false;
+
+        document.addEventListener('DOMContentLoaded', init);
+
+        function init() {
+            gridContainer = document.getElementById('grid-container');
+            dragShape = document.getElementById('drag-shape');
+            wordDisplay = document.getElementById('word-display');
+            phaseIndicator = document.getElementById('phase-indicator');
+            phaseText = document.getElementById('phase-text');
+            phaseHint = document.getElementById('phase-hint');
+            levelDisplay = document.getElementById('level-display');
+            scoreDisplay = document.getElementById('score-display');
+            shapesDisplay = document.getElementById('shapes-display');
+            targetsList = document.getElementById('targets-list');
+            doneBtn = document.getElementById('done-btn');
+            giveUpBtn = document.getElementById('give-up-btn');
+
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('next-level-btn').addEventListener('click', nextLevel);
+            doneBtn.addEventListener('click', enterFindingPhase);
+            giveUpBtn.addEventListener('click', giveUp);
+
+            for (let i = 0; i < 3; i++) {
+                const slot = document.getElementById('slot-' + i);
+                slot.addEventListener('click', function() { selectShape(i); });
+                slot.addEventListener('touchstart', function(e) { e.preventDefault(); selectShape(i); }, { passive: false });
+            }
+
+            gridContainer.addEventListener('mousedown', startShapeDrag);
+            gridContainer.addEventListener('touchstart', startShapeDrag, { passive: false });
+            document.addEventListener('mousemove', onDragMove);
+            document.addEventListener('touchmove', onDragMove, { passive: false });
+            document.addEventListener('mouseup', endShapeDrag);
+            document.addEventListener('touchend', endShapeDrag);
+        }
+
+        function startGame() {
+            state = { level:1, score:0, phase:'placing', grid:[], shapeSet:[], selectedShapeIndex:-1, shapesPlaced:0, targetWords:[], foundWords:[], bonusWords:[], selectedCells:[], isDragging:false, dragGridOffset:{r:0,c:0}, draggedCellIndex:-1 };
+            document.getElementById('start-screen').classList.add('hidden');
+            initLevel();
+        }
+
+        function initLevel() {
+            state.phase = 'placing';
+            state.grid = Array(CONFIG.canvasHeight).fill(null).map(function() { return Array(CONFIG.canvasWidth).fill(null); });
+            state.shapesPlaced = 0; state.foundWords = []; state.bonusWords = [];
+            state.selectedCells = []; state.selectedShapeIndex = -1;
+            wordFindingSetup = false; state.targetWords = [];
+
+            updatePhaseUI(); renderGrid(); prePopulateGrid(); generateShapeSet();
+
+            document.getElementById('words-formed-display').style.display = 'block';
+            document.getElementById('targets-panel').style.display = 'none';
+            document.getElementById('shape-dock').style.display = 'flex';
+            doneBtn.style.display = 'inline-block'; doneBtn.disabled = true;
+            giveUpBtn.style.display = 'none';
+
+            updateWordsFormedCount(); updateStats(); saveState();
+        }
+
+        function generateShapeSet() {
+            state.shapeSet = []; state.selectedShapeIndex = -1;
+            for (var i = 0; i < CONFIG.shapesPerSet; i++) {
+                var shape = generateOneShape();
+                shape.placed = false;
+                state.shapeSet.push(shape);
+            }
+            var anyCanFit = false;
+            for (var j = 0; j < state.shapeSet.length; j++) {
+                if (shapeCanFitAnywhere(state.shapeSet[j].cells)) { anyCanFit = true; break; }
+            }
+            if (!anyCanFit) { enterFindingPhase(); return; }
+            renderShapeSlots();
+        }
+
+        function generateOneShape() {
+            var rand = Math.random(), size = 4;
+            if (rand < 0.10) size = 2;
+            else if (rand < 0.35) size = 3;
+            else if (rand < 0.75) size = 4;
+            else size = 5;
+            if (!SHAPES_BY_SIZE[size]) size = 4;
+            var names = SHAPES_BY_SIZE[size];
+            var name = names[Math.floor(Math.random() * names.length)];
+            var cells = SHAPES[name].map(function(c) { return [c[0], c[1]]; });
+            var letters = cells.map(function() { return generateLetter(); });
+            return { name: name, cells: cells, letters: letters };
+        }
+
+        function shapeCanFitAnywhere(cells) {
+            var current = cells;
+            for (var rot = 0; rot < 4; rot++) {
+                if (rot > 0) current = rotateCells(current);
+                for (var r = 0; r < CONFIG.canvasHeight; r++) {
+                    for (var c = 0; c < CONFIG.canvasWidth; c++) {
+                        if (canPlaceShapeCells(current, r, c)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function selectShape(index) {
+            if (state.phase !== 'placing') return;
+            if (state.shapeSet[index] && state.shapeSet[index].placed) return;
+            state.selectedShapeIndex = (state.selectedShapeIndex === index) ? -1 : index;
+            renderShapeSlots();
+        }
+
+        function prePopulateGrid() {
+            var placed = 0, attempts = 0;
+            while (placed < CONFIG.prePopulateCount && attempts < 50) {
+                attempts++;
+                var size = 3 + Math.floor(Math.random() * 2);
+                var names = SHAPES_BY_SIZE[size]; if (!names) continue;
+                var name = names[Math.floor(Math.random() * names.length)];
+                var cells = SHAPES[name];
+                var letters = cells.map(function() { return generateLetter(); });
+                var r = Math.floor(Math.random() * CONFIG.canvasHeight);
+                var c = Math.floor(Math.random() * CONFIG.canvasWidth);
+                if (canPlaceShapeCells(cells, r, c)) {
+                    cells.forEach(function(cell, i) { state.grid[r + cell[0]][c + cell[1]] = letters[i]; });
+                    placed++;
+                }
+            }
+            state.shapesPlaced += placed;
+            if (state.shapesPlaced > 0) doneBtn.disabled = false;
+            renderGrid();
+        }
+
+        function placeSelectedShape(baseRow, baseCol) {
+            var idx = state.selectedShapeIndex;
+            if (idx < 0 || idx >= state.shapeSet.length) return false;
+            var shape = state.shapeSet[idx];
+            if (shape.placed) return false;
+            if (!canPlaceShapeCells(shape.cells, baseRow, baseCol)) return false;
+
+            shape.cells.forEach(function(cell, i) {
+                state.grid[baseRow + cell[0]][baseCol + cell[1]] = shape.letters[i];
+            });
+
+            shape.placed = true; state.shapesPlaced++;
+            state.selectedShapeIndex = -1; doneBtn.disabled = false;
+            updateStats(); renderGrid(); renderShapeSlots(); updateWordsFormedCount();
+
+            document.querySelectorAll('.grid-cell.filled').forEach(function(cell) {
+                cell.classList.add('snap-in');
+                setTimeout(function() { cell.classList.remove('snap-in'); }, 200);
+            });
+
+            var allPlaced = state.shapeSet.every(function(s) { return s.placed; });
+            if (allPlaced) {
+                setTimeout(generateShapeSet, 300);
+            } else {
+                var remainingCanFit = state.shapeSet.some(function(s) {
+                    return !s.placed && shapeCanFitAnywhere(s.cells);
+                });
+                if (!remainingCanFit) setTimeout(enterFindingPhase, 500);
+            }
+            saveState(); return true;
+        }
+
+        var dragOffset = { x: 0, y: 0 };
+
+        function startShapeDrag(e) {
+            if (state.phase !== 'placing' || state.selectedShapeIndex < 0) return;
+            var shape = state.shapeSet[state.selectedShapeIndex];
+            if (!shape || shape.placed) return;
+            e.preventDefault();
+            state.isDragging = true;
+            state.dragGridOffset = { r: 0, c: 0 }; state.draggedCellIndex = 0;
+            renderDragShape();
+            var evt = e.touches ? e.touches[0] : e;
+            updateDragPosition(evt.clientX, evt.clientY);
+            dragShape.classList.add('active');
+        }
+
+        function onDragMove(e) {
+            if (!state.isDragging || state.phase !== 'placing') return;
+            e.preventDefault();
+            var touch = e.touches ? e.touches[0] : e;
+            updateDragPosition(touch.clientX, touch.clientY);
+            updateValidPositions(touch.clientX, touch.clientY);
+        }
+
+        function endShapeDrag(e) {
+            if (!state.isDragging || state.phase !== 'placing') return;
+            state.isDragging = false; dragShape.classList.remove('active');
+            var touch = e.changedTouches ? e.changedTouches[0] : e;
+            var gridRect = gridContainer.getBoundingClientRect();
+            var cellW = gridRect.width / CONFIG.canvasWidth;
+            var cellH = gridRect.height / CONFIG.canvasHeight;
+            var col = Math.floor((touch.clientX - gridRect.left) / cellW) - state.dragGridOffset.c;
+            var row = Math.floor((touch.clientY - gridRect.top) / cellH) - state.dragGridOffset.r;
+            placeSelectedShape(row, col);
+            clearHighlights();
+        }
+
+        function updateDragPosition(x, y) {
+            dragShape.style.left = (x - dragOffset.x) + 'px';
+            dragShape.style.top = (y - dragOffset.y) + 'px';
+        }
+
+        function updateValidPositions(x, y) {
+            var gridRect = gridContainer.getBoundingClientRect();
+            var cellW = gridRect.width / CONFIG.canvasWidth;
+            var cellH = gridRect.height / CONFIG.canvasHeight;
+            clearHighlights();
+            var col = Math.floor((x - gridRect.left) / cellW);
+            var row = Math.floor((y - gridRect.top) / cellH);
+            if (col < 0 || col >= CONFIG.canvasWidth || row < 0 || row >= CONFIG.canvasHeight) return;
+            var idx = state.selectedShapeIndex;
+            if (idx < 0) return;
+            var shape = state.shapeSet[idx];
+            if (!shape || shape.placed) return;
+
+            var bestCells = null, bestOffset = null;
+            var currentCells = shape.cells;
+            var myIdx = (state.draggedCellIndex >= 0 && state.draggedCellIndex < currentCells.length) ? state.draggedCellIndex : 0;
+
+            for (var rot = 0; rot < 4; rot++) {
+                if (rot > 0) currentCells = rotateCells(currentCells);
+                var anchors = [myIdx];
+                for (var i = 0; i < currentCells.length; i++) { if (i !== myIdx) anchors.push(i); }
+                for (var a = 0; a < anchors.length; a++) {
+                    var ai = anchors[a] < currentCells.length ? anchors[a] : 0;
+                    var off = { r: currentCells[ai][0], c: currentCells[ai][1] };
+                    if (canPlaceShapeCells(currentCells, row - off.r, col - off.c)) {
+                        bestCells = currentCells; bestOffset = off; break;
+                    }
+                }
+                if (bestCells) break;
+            }
+
+            if (bestCells) {
+                shape.cells = bestCells;
+                state.dragGridOffset = bestOffset;
+                renderDragShape();
+                var baseR = row - bestOffset.r, baseC = col - bestOffset.c;
+                bestCells.forEach(function(cell, i) {
+                    var el = gridContainer.querySelector('.grid-cell[data-row="' + (baseR + cell[0]) + '"][data-col="' + (baseC + cell[1]) + '"]');
+                    if (el) { el.classList.add('highlight-preview'); el.textContent = shape.letters[i]; }
+                });
+            }
+        }
+
+        function enterFindingPhase() {
+            state.phase = 'finding'; state.selectedShapeIndex = -1;
+            if (dragShape) dragShape.classList.remove('active');
+            state.isDragging = false;
+            updatePhaseUI(); renderGrid();
+            doneBtn.style.display = 'none'; giveUpBtn.style.display = 'block';
+            document.getElementById('words-formed-display').style.display = 'none';
+            document.getElementById('shape-dock').style.display = 'none';
+            document.getElementById('targets-panel').style.display = 'block';
+            generateFinalTargets(); setupWordFinding();
+        }
+
+        function setupWordFinding() {
+            gridContainer.querySelectorAll('.grid-cell.filled').forEach(function(cell) {
+                cell.removeEventListener('mousedown', startWordDrag);
+                cell.removeEventListener('touchstart', startWordDrag);
+                cell.addEventListener('mousedown', startWordDrag);
+                cell.addEventListener('touchstart', startWordDrag, { passive: false });
+            });
+            if (!wordFindingSetup) {
+                document.addEventListener('mousemove', onWordDrag);
+                document.addEventListener('touchmove', onWordDrag, { passive: false });
+                document.addEventListener('mouseup', endWordDrag);
+                document.addEventListener('touchend', endWordDrag);
+                wordFindingSetup = true;
+            }
+        }
+
+        function startWordDrag(e) {
+            if (state.phase !== 'finding') return;
+            e.preventDefault();
+            var cell = e.target.closest('.grid-cell');
+            if (!cell || !cell.classList.contains('filled')) return;
+            state.isDragging = true;
+            state.selectedCells = [{ row: parseInt(cell.dataset.row), col: parseInt(cell.dataset.col) }];
+            updateWordSelection();
+        }
+
+        function onWordDrag(e) {
+            if (!state.isDragging || state.phase !== 'finding') return;
+            e.preventDefault();
+            var touch = e.touches ? e.touches[0] : e;
+            var el = document.elementFromPoint(touch.clientX, touch.clientY);
+            var cell = el ? el.closest('.grid-cell') : null;
+            if (!cell || !cell.classList.contains('filled')) return;
+            var row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col);
+
+            if (state.selectedCells.length >= 2) {
+                var prev = state.selectedCells[state.selectedCells.length - 2];
+                if (prev.row === row && prev.col === col) {
+                    state.selectedCells.pop(); updateWordSelection(); return;
+                }
+            }
+
+            var last = state.selectedCells[state.selectedCells.length - 1];
+            var isAdj = (Math.abs(row - last.row) + Math.abs(col - last.col) === 1);
+            var already = state.selectedCells.some(function(c) { return c.row === row && c.col === col; });
+            if (isAdj && !already) { state.selectedCells.push({ row: row, col: col }); updateWordSelection(); }
+        }
+
+        function endWordDrag() {
+            if (!state.isDragging) return;
+            state.isDragging = false;
+            var word = state.selectedCells.map(function(c) { return state.grid[c.row][c.col]; }).join('');
+            if (word.length >= CONFIG.minWordLength && VALID_WORDS.has(word.toLowerCase())) handleWordFound(word);
+            state.selectedCells = []; updateWordSelection();
+            wordDisplay.classList.remove('visible', 'valid');
+        }
+
+        function updateWordSelection() {
+            gridContainer.querySelectorAll('.grid-cell').forEach(function(cell) {
+                var r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+                var sel = state.selectedCells.some(function(s) { return s.row === r && s.col === c; });
+                cell.classList.toggle('selected', sel);
+            });
+            if (state.selectedCells.length > 0) {
+                var word = state.selectedCells.map(function(c) { return state.grid[c.row][c.col]; }).join('');
+                wordDisplay.textContent = word; wordDisplay.classList.add('visible');
+                var valid = word.length >= CONFIG.minWordLength && VALID_WORDS.has(word.toLowerCase());
+                wordDisplay.classList.toggle('valid', valid);
+            } else { wordDisplay.classList.remove('visible'); }
+        }
+
+        function findStraightLineWords() {
+            var found = new Set(), H = CONFIG.canvasHeight, W = CONFIG.canvasWidth;
+            for (var r = 0; r < H; r++) {
+                for (var sc = 0; sc < W; sc++) {
+                    if (state.grid[r][sc] === null) continue;
+                    var word = '';
+                    for (var c = sc; c < W && state.grid[r][c] !== null; c++) {
+                        word += state.grid[r][c];
+                        if (word.length >= CONFIG.minWordLength) {
+                            if (VALID_WORDS.has(word.toLowerCase())) found.add(word);
+                            var rev = word.split('').reverse().join('');
+                            if (VALID_WORDS.has(rev.toLowerCase())) found.add(rev);
+                        }
+                    }
+                }
+            }
+            for (var c2 = 0; c2 < W; c2++) {
+                for (var sr = 0; sr < H; sr++) {
+                    if (state.grid[sr][c2] === null) continue;
+                    var word2 = '';
+                    for (var r2 = sr; r2 < H && state.grid[r2][c2] !== null; r2++) {
+                        word2 += state.grid[r2][c2];
+                        if (word2.length >= CONFIG.minWordLength) {
+                            if (VALID_WORDS.has(word2.toLowerCase())) found.add(word2);
+                            var rev2 = word2.split('').reverse().join('');
+                            if (VALID_WORDS.has(rev2.toLowerCase())) found.add(rev2);
+                        }
+                    }
+                }
+            }
+            return Array.from(found);
+        }
+
+        function findAllWordsOnGrid() {
+            var foundWords = new Set(), H = CONFIG.canvasHeight, W = CONFIG.canvasWidth;
+            var dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+            function dfs(r, c, word, visited) {
+                var nw = word + state.grid[r][c];
+                if (nw.length >= CONFIG.minWordLength && VALID_WORDS.has(nw.toLowerCase())) foundWords.add(nw);
+                if (nw.length >= 6) return;
+                for (var d = 0; d < dirs.length; d++) {
+                    var nr = r + dirs[d][0], nc = c + dirs[d][1];
+                    var key = nr + ',' + nc;
+                    if (nr >= 0 && nr < H && nc >= 0 && nc < W && state.grid[nr][nc] !== null && !visited.has(key)) {
+                        visited.add(key); dfs(nr, nc, nw, visited); visited.delete(key);
+                    }
+                }
+            }
+            for (var r = 0; r < H; r++) for (var c = 0; c < W; c++) {
+                if (state.grid[r][c] !== null) { var v = new Set([r+','+c]); dfs(r, c, '', v); }
+            }
+            return Array.from(foundWords).map(function(w) { return { word: w, cells: [] }; });
+        }
+
+        function generateFinalTargets() {
+            var words = findStraightLineWords();
+            words.sort(function(a, b) { return b.length - a.length || a.localeCompare(b); });
+            state.targetWords = words.slice(0, Math.min(8, Math.max(5, words.length)));
+            renderTargets(); updateWordCountStat();
+        }
+
+        function updateWordsFormedCount() {
+            var all = findAllWordsOnGrid();
+            var count = new Set(all.map(function(w) { return w.word; })).size;
+            document.getElementById('words-formed-display').textContent = 'Words Formed: ' + count;
+        }
+
+        function handleWordFound(word) {
+            var upper = word.toUpperCase();
+            if (state.foundWords.indexOf(upper) >= 0 || state.bonusWords.indexOf(upper) >= 0) return;
+            var isTarget = state.targetWords.indexOf(upper) >= 0;
+            if (isTarget) state.foundWords.push(upper); else state.bonusWords.push(upper);
+            var score = word.length * 10 + (word.length > 4 ? (word.length - 4) * 15 : 0) + (isTarget ? 50 : 0);
+            state.score += score;
+            showFloatingScore(score);
+            state.selectedCells.forEach(function(c) {
+                var el = gridContainer.querySelector('.grid-cell[data-row="'+c.row+'"][data-col="'+c.col+'"]');
+                if (el) { el.classList.add('word-found'); setTimeout(function() { el.classList.remove('word-found'); }, 400); }
+            });
+            renderTargets(); updateStats(); updateWordCountStat(); saveState();
+            if (state.foundWords.length === state.targetWords.length && state.targetWords.length > 0) setTimeout(finishLevel, 500);
+        }
+
+        function showFloatingScore(score) {
+            var el = document.createElement('div'); el.className = 'floating-score';
+            el.textContent = '+' + score;
+            el.style.left = (window.innerWidth / 2) + 'px'; el.style.top = (window.innerHeight / 2) + 'px';
+            document.body.appendChild(el); setTimeout(function() { el.remove(); }, 1000);
+        }
+
+        function giveUp() {
+            if (state.phase !== 'finding') return;
+            var all = findAllWordsOnGrid();
+            var missed = all.filter(function(w) { return state.foundWords.indexOf(w.word) < 0 && state.bonusWords.indexOf(w.word) < 0; });
+            setTimeout(function() { finishLevel(missed); }, 1500);
+        }
+
+        function finishLevel(missedWords) {
+            missedWords = missedWords || [];
+            var fill = calculateFillPercent();
+            var bonus = Math.floor(fill * 2) + (state.foundWords.length === state.targetWords.length ? 100 : 0) + state.level * 25;
+            state.score += bonus;
+            var emojis = [];
+            if (state.foundWords.length === state.targetWords.length) emojis.push('\u{1F7E9}');
+            if (state.bonusWords.length > 0) emojis.push('\u2B50');
+            if (fill > 80) emojis.push('\u{1F9F1}');
+            if (state.bonusWords.length >= 3) emojis.push('\u{1F525}');
+            document.getElementById('summary-emojis').textContent = emojis.join('') || '\u{1F4DD}';
+            document.getElementById('stat-words').textContent = state.foundWords.length + '/' + state.targetWords.length;
+            document.getElementById('stat-bonus').textContent = state.bonusWords.length;
+            document.getElementById('stat-fill').textContent = Math.round(fill) + '%';
+            document.getElementById('stat-score').textContent = state.score;
+            var txt = 'WordStax Level ' + state.level + ': ' + emojis.join('') + ' Score: ' + state.score;
+            var shareEl = document.getElementById('share-text');
+            shareEl.textContent = txt;
+            shareEl.onclick = function() { navigator.clipboard.writeText(txt); shareEl.textContent = 'Copied!'; setTimeout(function() { shareEl.textContent = txt; }, 1000); };
+            document.getElementById('level-complete-screen').classList.remove('hidden');
+        }
+
+        function calculateFillPercent() {
+            var filled = 0;
+            for (var r = 0; r < CONFIG.canvasHeight; r++) for (var c = 0; c < CONFIG.canvasWidth; c++) if (state.grid[r][c] !== null) filled++;
+            return (filled / (CONFIG.canvasHeight * CONFIG.canvasWidth)) * 100;
+        }
+
+        function nextLevel() {
+            document.getElementById('level-complete-screen').classList.add('hidden');
+            state.level++; initLevel();
+        }
+
+        function generateLetter() {
+            var rand = Math.random();
+            if (rand < CONFIG.vowelRatio) return VOWELS[Math.floor(Math.random() * VOWELS.length)];
+            if (rand < CONFIG.vowelRatio + CONFIG.commonLetterBias * (1 - CONFIG.vowelRatio)) {
+                var common = 'TNRSLDCMFPGBHW';
+                return common[Math.floor(Math.random() * common.length)];
+            }
+            return CONSONANTS[Math.floor(Math.random() * CONSONANTS.length)];
+        }
+
+        function rotateCells(cells) {
+            var minR = Infinity, minC = Infinity;
+            var turned = cells.map(function(cell) {
+                var nr = cell[1], nc = -cell[0];
+                if (nr < minR) minR = nr; if (nc < minC) minC = nc;
+                return [nr, nc];
+            });
+            return turned.map(function(cell) { return [cell[0] - minR, cell[1] - minC]; });
+        }
+
+        function canPlaceShapeCells(cells, baseRow, baseCol) {
+            for (var i = 0; i < cells.length; i++) {
+                var r = baseRow + cells[i][0], c = baseCol + cells[i][1];
+                if (r < 0 || r >= CONFIG.canvasHeight || c < 0 || c >= CONFIG.canvasWidth) return false;
+                if (state.grid[r][c] !== null) return false;
+            }
+            return true;
+        }
+
+        function clearHighlights() {
+            gridContainer.querySelectorAll('.grid-cell').forEach(function(cell) {
+                cell.classList.remove('highlight-preview');
+                var r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+                if (state.grid[r][c] === null) cell.textContent = '';
+            });
+        }
+
+        function renderGrid() {
+            gridContainer.innerHTML = '';
+            for (var r = 0; r < CONFIG.canvasHeight; r++) {
+                for (var c = 0; c < CONFIG.canvasWidth; c++) {
+                    var cell = document.createElement('div');
+                    cell.className = 'grid-cell'; cell.dataset.row = r; cell.dataset.col = c;
+                    if (state.grid[r][c] !== null) { cell.textContent = state.grid[r][c]; cell.classList.add('filled'); }
+                    gridContainer.appendChild(cell);
+                }
+            }
+            if (state.phase === 'finding') setupWordFinding();
+        }
+
+        function renderShapeSlots() {
+            for (var i = 0; i < CONFIG.shapesPerSet; i++) {
+                var slot = document.getElementById('slot-' + i);
+                slot.innerHTML = ''; slot.classList.remove('selected-slot', 'placed');
+                if (!state.shapeSet[i]) continue;
+                var shape = state.shapeSet[i];
+                if (shape.placed) slot.classList.add('placed');
+                if (i === state.selectedShapeIndex && !shape.placed) slot.classList.add('selected-slot');
+
+                var preview = document.createElement('div'); preview.className = 'shape-preview';
+                var maxR = 0, maxC = 0;
+                shape.cells.forEach(function(c) { maxR = Math.max(maxR, c[0]); maxC = Math.max(maxC, c[1]); });
+                preview.style.gridTemplateRows = 'repeat(' + (maxR+1) + ', 1fr)';
+                preview.style.gridTemplateColumns = 'repeat(' + (maxC+1) + ', 1fr)';
+
+                var cellSet = new Set(shape.cells.map(function(c) { return c[0]+','+c[1]; }));
+                for (var r = 0; r <= maxR; r++) {
+                    for (var c2 = 0; c2 <= maxC; c2++) {
+                        if (cellSet.has(r+','+c2)) {
+                            var pc = document.createElement('div'); pc.className = 'preview-cell';
+                            pc.style.gridRow = r+1; pc.style.gridColumn = c2+1;
+                            preview.appendChild(pc);
+                        }
+                    }
+                }
+                slot.appendChild(preview);
+            }
+        }
+
+        function renderDragShape() {
+            dragShape.innerHTML = '';
+            var idx = state.selectedShapeIndex;
+            if (idx < 0 || !state.shapeSet[idx]) return;
+            var shape = state.shapeSet[idx];
+            var maxR = 0, maxC = 0;
+            shape.cells.forEach(function(c) { maxR = Math.max(maxR, c[0]); maxC = Math.max(maxC, c[1]); });
+            var gridRect = gridContainer.getBoundingClientRect();
+            var cs = Math.max(20, Math.min(36, Math.floor(gridRect.width / CONFIG.canvasWidth) - 3));
+            dragShape.style.gridTemplateRows = 'repeat('+(maxR+1)+','+cs+'px)';
+            dragShape.style.gridTemplateColumns = 'repeat('+(maxC+1)+','+cs+'px)';
+            dragShape.style.gap = '2px';
+
+            var cellMap = new Map();
+            shape.cells.forEach(function(c, i) { cellMap.set(c[0]+','+c[1], shape.letters[i]); });
+            for (var r = 0; r <= maxR; r++) {
+                for (var c2 = 0; c2 <= maxC; c2++) {
+                    var key = r+','+c2;
+                    if (cellMap.has(key)) {
+                        var el = document.createElement('div'); el.className = 'drag-cell';
+                        el.style.width = cs+'px'; el.style.height = cs+'px';
+                        el.style.gridRow = r+1; el.style.gridColumn = c2+1;
+                        el.style.display = 'flex'; el.style.alignItems = 'center';
+                        el.style.justifyContent = 'center'; el.style.fontSize = '12px';
+                        el.style.fontWeight = 'bold'; el.style.color = '#fff';
+                        el.textContent = cellMap.get(key);
+                        dragShape.appendChild(el);
+                    }
+                }
+            }
+            dragOffset.x = (maxC + 1) * cs / 2;
+            dragOffset.y = (maxR + 1) * cs / 2;
+        }
+
+        function renderTargets() {
+            targetsList.innerHTML = '';
+            state.targetWords.forEach(function(word) {
+                var chip = document.createElement('div'); chip.className = 'target-word';
+                if (state.foundWords.indexOf(word) >= 0) { chip.classList.add('found'); chip.textContent = word; }
+                else { chip.textContent = word[0] + '_'.repeat(word.length - 1); }
+                targetsList.appendChild(chip);
+            });
+            state.bonusWords.forEach(function(word) {
+                var chip = document.createElement('div'); chip.className = 'target-word bonus';
+                chip.textContent = word; targetsList.appendChild(chip);
+            });
+        }
+
+        function updatePhaseUI() {
+            phaseIndicator.className = state.phase === 'placing' ? 'placing' : 'finding';
+            phaseText.textContent = state.phase === 'placing' ? 'Phase 1: Place Shapes' : 'Phase 2: Find Words';
+            phaseHint.textContent = state.phase === 'placing' ? 'Tap a shape below, then drag it onto the grid' : 'Drag across letters to form words';
+        }
+
+        function updateStats() {
+            levelDisplay.textContent = state.level;
+            scoreDisplay.textContent = state.score;
+            shapesDisplay.textContent = state.shapesPlaced;
+        }
+
+        function updateWordCountStat() {}
+
+        function saveState() {
+            try { localStorage.setItem('wordstax_state', JSON.stringify({ level:state.level, score:state.score, grid:state.grid, shapesPlaced:state.shapesPlaced })); } catch(e) {}
+        }
+    </script>
+</body>
+</html>
